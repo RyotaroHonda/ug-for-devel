@@ -1,0 +1,47 @@
+site_name: AMANEQ User Guide for developers
+#site_url: https://hul-official.gitlab.io/hul-ug-en/
+site_description: AMANEQ official user guide
+site_author: 'R.Honda'
+#repo_url: https://gitlab.com/hul-official/hul-ug-en
+repo_name: ug-for-devel
+
+markdown_extensions:
+  - attr_list
+  - def_list
+  - markdown_katex:
+      no_inline_svg: true
+      insert_fonts_css: true
+#  - hbfm.inline_coloring
+#  - hbfm.inline_list
+#  - toc:
+#      slugify: !!python/name:hbfm.toc.slugify
+  #- hbfm.number_headers
+  #- hbfm.quote_uri_hash
+  - caption:
+      stripTitle: false
+      captionNumbering: true
+
+extra_css:
+  - css/custom.css
+
+site_name: AMANEQ UG for developers
+site_author: Ryotaro Honda
+copyright: Open-It AMANEQ project
+
+plugins:
+  - with-pdf:
+      author: Ryotaro Honda
+      copyright: Open-It AMANEQ project
+      cover_title: AMANEQ User Guide for Developers
+      cover_subtitle: 2022.10.26
+      enabled_if_env: ENABLE_PDF_EXPORT
+      output_path: ../pdf/AMANEQ_UG_forDevel.pdf
+
+nav:
+  - Top: index.md
+#  - Hardware: hardware/main.md
+#  - SiTCP: sitcp/main.md
+#  - Firmware: firmware/main.md
+#  - For Developer: developer/main.md
+#  - Software: software/main.md
+#  - Practical Usage: practical/main.md
