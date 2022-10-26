@@ -1,0 +1,19 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - master
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - run: pip install mkdocs
+      - run: pip install markdown_katex
+      - run: pip install mkdocs-with-pdf
+      - run: pip install git+https://github.com/flywire/caption
+      - run: mkdocs gh-deploy --force
