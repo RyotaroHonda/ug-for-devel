@@ -39,7 +39,7 @@ plugins:
 
 nav:
   - Top: index.md
-#  - Hardware: hardware/main.md
+  - Mikumari: mikumari/main.md
 #  - SiTCP: sitcp/main.md
 #  - Firmware: firmware/main.md
 #  - For Developer: developer/main.md
