@@ -59,7 +59,7 @@ entity CbtLane is
   port
     (
       -- SYSTEM port --
-      srst          : in std_logic; -- Asyncrhonous assert, syncrhonous deassert reset. (active high)
+      srst          : in std_logic; -- Asyncrhonous assert, synchronous de-assert reset. (active high)
       clkSer        : in std_logic; -- From BUFG (5 x clkPar freq.)
       clkPar        : in std_logic; -- From BUFG
       clkIndep      : in std_logic; -- Independent clock for monitor
@@ -318,3 +318,387 @@ When cbtLaneUp is high, the CBT checks whether the sampled bit pattern is matche
 When cbtLaneUp is high, the CBT transmits the T-type character, dogfood character, periodically. The dogfood character resets the watch dog timer in other side. If the watch dog timer can't eat dogfood within specified time, the watchDogErr goes high, and the watchdog timer requests to reset the CBT.
 
 ## MIKUMARI link protocol
+
+The MIKUMARI link is a link layer protocol to establish the communication link between two end points, which are physically connected. The roles of the MIKUMARI link are as follows.
+
+- Define the K-type characters; these are characters for the link control.
+- Define a frame structure, called the MIKUMARI frame, for the data transmission
+- One-shot pulse transmission with fixed latency using K-type characters.
+
+### Interface of MIKUAMRI link
+
+The top-level block of the MIKUMARI link is **MikumariLane**. The global parameters for the MIKUMARI link are defined in ``defMikumari.vhd``. The MikumariLane's entity port structure is as follows.
+
+```VHDL
+entity MikumariLane is
+  generic
+  (
+    -- CBT --
+    kNumEncodeBits   : integer:= 2;
+    -- Scrambler --
+    enScrambler      : boolean:= true;
+    -- DEBUG --
+    enDEBUG          : boolean:= false
+  );
+  port
+  (
+    -- SYSTEM port --------------------------------------------------------------------------
+    srst        : in std_logic; -- Asynchronous assert, synchronous de-assert reset. (active high)
+    clkPar      : in std_logic; -- From BUFG
+    cbtUpIn     : in std_logic; -- Cbt lane up signal
+    linkUp      : out std_logic; -- Mikumari link is up
+
+    -- TX port ------------------------------------------------------------------------------
+    -- Data I/F --
+    dataInTx      : in CbtUDataType;       -- User data input.
+    validInTx     : in std_logic;          -- Indicate dataIn is valid.
+    frameLastInTx : in std_logic;          -- Indicate current dataIn is a last character in a normal frame.
+    txAck         : out std_logic;         -- Acknowledge to validIn signal.
+
+    pulseIn       : in std_logic;          -- Pulse input. Must be one-shot signal.
+    pulseTypeTx   : in MikumariPulseType;  -- 3-bit short message to be sent with pulse.
+    busyPulseTx   : out std_logic;         -- Under transmission of previous pulse. If high, pulseIn is ignored.
+
+    -- Cbt ports --
+    isKtypeOut  : out std_logic;
+    cbtDataOut  : out CbtUDataType;
+    cbtValidOut : out std_logic;
+    cbtTxAck    : in std_logic;
+    cbtTxBeat   : in std_logic;
+
+    -- RX port ------------------------------------------------------------------------------
+    -- Data I/F --
+    dataOutRx   : out CbtUDataType;        -- User data output.
+    validOutRx  : out std_logic;           -- Indicate current dataOut is valid.
+    frameLastRx : out std_logic;           -- Indicate current dataOut is the last data in a normal frame.
+    checksumErr : out std_logic;           -- Check-sum error is happened in the present normal frame.
+
+    pulseOut    : out std_logic;           -- Reproduced one-shot pulse output.
+    pulseTypeRx : out MikumariPulseType;   -- Short message accompanying the pulse.
+
+    -- Cbt ports --
+    isKtypeIn   : in std_logic; --
+    cbtDataIn   : in CbtUDataType;
+    cbtValidIn  : in std_logic
+
+  );
+end MikumariLane;
+```
+
+<table class="vmgr-table">
+  <thead><tr>
+    <th class="nowrap"><span class="mgr-10">Port </span></th>
+    <th class="nowrap"><span class="mgr-10">In/Out</span></th>
+    <th class="nowrap"><span class="mgr-10">Comment</span></th>
+  </tr></thead>
+  <tbody>
+  <tr><td class="tcenter" colspan=4><b>Generic port</b></td></tr>
+  <tr>
+    <td>kNumEncodeBits</td>
+    <td class="tcenter">-</td>
+    <td>Payload size of the CDCM signal. Set 1 or 2. 1: CDCM-10-1.5. 2: CDCM-10-2.5. Set the same value given for the CBT.</td>
+  </tr>
+  <tr>
+    <td>enScrambler</td>
+    <td class="tcenter">-</td>
+    <td>If it's true, data scrambler is enabled. Enabling the scrambler is recommended for the better jitter performance.</td>
+  </tr>
+  </tr>
+    <td>enDebug</td>
+    <td class="tcenter">-</td>
+    <td>Enable preset mark_debug constraints. The debug core will be implemented.</td>
+  </tr>
+  <tr><td class="tcenter" colspan=4><b>IO port</b></td></tr>
+  <tr>
+    <td>srst</td>
+    <td class="tcenter">In</td>
+    <td>Asynchronous assert, synchronous de-assert reset. (active high) </td>
+  </tr>
+  <tr>
+    <td>clkPar</td>
+    <td class="tcenter">In</td>
+    <td>Parallel clock input; it is the identical clock as for the CBT.</td>
+  </tr>
+  <tr>
+    <td>cbtUpIn</td>
+    <td class="tcenter">In</td>
+    <td>cbtLaneUp signal from the CBT. Connect to the cbtLaneUp port directly.</td>
+  </tr>
+  <tr>
+    <td>linkUp</td>
+    <td class="tcenter">Out</td>
+    <td>This goes high when the link connection is established. If this is high, access to the data I/F ports are valid.</td>
+  </tr>
+    <td>dataInTx</td>
+    <td class="tcenter">In</td>
+    <td>8-bit user data input, the frame payload.</td>
+  </tr>
+  <tr>
+    <td>validInTx</td>
+    <td class="tcenter">In</td>
+    <td>It denotes that the current dataInTx is valid. It is the request for the MIKUMARI link to transmit it.</td>
+  </tr>
+  <tr>
+    <td>frameLastInTx</td>
+    <td class="tcenter">In</td>
+    <td>This signal indicates that the current dataInTx is last 1-byte in this frame transmission cycle. If the MIKUMARI link detects this signal, the frame checksum and the frame-end K-type character (FEK) are inserted.</td>
+  </tr>
+  <tr>
+    <td>txAck</td>
+    <td class="tcenter">Out</td>
+    <td>The acknowledge signal respect to validInTx. This goes high when the dataInTx is latched.</td>
+  </tr>
+  <tr>
+    <td>pulseIn</td>
+    <td class="tcenter">In</td>
+    <td>One-shot pulse input, equal to the pulse transmission request. If the MIKUMARI link detects this signal when the busyPulseTx is low, the pulse K-type character is inserted. Pulse transmission request has higher priority than the validInTX. <b>Pulse width must be one-shot, 1 clock cycle.</b></td>
+  </tr>
+  <tr>
+    <td>pulseTypeTx</td>
+    <td class="tcenter">In</td>
+    <td>Pulse type input. This type value is transmitted together with a one-shot pulse. Currently, the pulse type width is 3-bit, and the 8-types of pulses can be transferred. The type value is latch when the pulseIn is high.</td>
+  </tr>
+  <tr>
+    <td>busyPulseTx</td>
+    <td class="tcenter">Out</td>
+    <td>Busy signal for pulse transmission. When it is high, the pulseIn input is ignored.</td>
+  </tr>
+  <tr>
+    <td>isKtypeOut</td>
+    <td class="tcenter">Out</td>
+    <td>It indicates that the current cbtDataOut is a K-type character. Connect to isKtypeTx of the CbtLane.</td>
+  </tr>
+  <tr>
+    <td>cbtDataOut</td>
+    <td class="tcenter">Out</td>
+    <td>8-bit data for the CBT. Connect to dataInTx of the CbtLane.</td>
+  </tr>
+  <tr>
+    <td>cbtValidOut</td>
+    <td class="tcenter">Out</td>
+    <td>It indicates that the current cbtDataOut is valid. Connect to validInTx of the CbtLane.</td>
+  </tr>
+  <tr>
+    <td>cbtTxAck</td>
+    <td class="tcenter">In</td>
+    <td>Acknowledge from the CBT respect to cbtValidOut. Connect to txAck of the CbtLane.</td>
+  </tr>
+  <tr>
+    <td>cbtTxBeat</td>
+    <td class="tcenter">In</td>
+    <td>The boundary of the CBT character transfer cycle. Connect to txBeat of the CbtLane.</td>
+  </tr>
+  <tr>
+    <td>dataOutRx</td>
+    <td class="tcenter">Out</td>
+    <td>8-bit user data output, received frame payload.</td>
+  </tr>
+  <tr>
+    <td>validOutRx</td>
+    <td class="tcenter">Out</td>
+    <td>Data valid. If this is high, the current dataOutRx is valid.</td>
+  </tr>
+  <tr>
+    <td>frameLastRx</td>
+    <td class="tcenter">Out</td>
+    <td>This goes high when the current dataOutRx is last 1-byte of the received frame payload.</td>
+  </tr>
+  <tr>
+    <td>checksumErr</td>
+    <td class="tcenter">Out</td>
+    <td>If it is high, the checksum miss match is happened in the present MIKUMARI frame.</td>
+  </tr>
+  <tr>
+    <td>pulseOut</td>
+    <td class="tcenter">Out</td>
+    <td>Received one-shot pulse output.</td>
+  </tr>
+  <tr>
+    <td>pulseTypeRx</td>
+    <td class="tcenter">Out</td>
+    <td>Received pulse type value. The value when pulseOut is high is valid.</td>
+  </tr>
+  <tr>
+    <td>isKtypeIn</td>
+    <td class="tcenter">In</td>
+    <td>It indicates that the current dataOutRx is a K-type character. Connect to isKTypeRx of the CbtLane.</td>
+  </tr>
+  <tr>
+    <td>cbtDataIn</td>
+    <td class="tcenter">In</td>
+    <td>8-bit data from the CBT. Connect to dataOutRx of the CbtLane.</td>
+  </tr>
+  <tr>
+    <td>cbtValidIn</td>
+    <td class="tcenter">In</td>
+    <td>It indicates that the current cbtDataIn is valid. Connect to validOutRx of the CbtLane.</td>
+  </tr>
+</tbody>
+</table>
+
+### MIKUMARI frame and data transmission
+
+The MIKUMARI protocol transmits the data using a simple frame structure, called the MIKUMARI frame. The frame consists of four blocks as follows.
+
+- Frame start K-type character (FSK)
+- Arbitral length data body (payload)
+- 8-bit checksum
+- Frame end K-type character (FEK)
+
+The frame structure is similar that of [Xilinx Aurora 8b/1b](https://japan.xilinx.com/products/intellectual-property/aurora8b10b.html) protocol. Inserting FSK, FEK, and checksum are done by the MIKUMARI link, and later two are inserted after detecting frameLastInTx. At the receiver side, frameLastOutRx assertion and checksum calculation are performed after detecting the FEK. **Note that 8-bit checksum data does not appear from dataOutRx. It is internally used.** About details of the frame structure, see also [Ref](hogehoge).
+
+Since the frame body and 8-bit checksum data are D-type character, their transmission request can be blocked by the T-type character transmission by the CBT. If it is blocked, the txAck is not returned at the expected timing, the upper layer protocol needs to keep the current dataInTx and validInTx until txAck is returned. It is defined that pulse K-type characters have higher priority to other K-type character in this protocol. Thus, FSK and FEK insertion can be delayed by pulse transmission request. Therefore, the data transmission using the MIKUMARI frame is not perfectly fixed. Use the pulse transfer function for usages where arrival times must be strictly controlled.
+
+The data interface of the MIKUMARI link is also similar to that of [Xilinx Aurora 8b/1b](https://japan.xilinx.com/products/intellectual-property/aurora8b10b.html) protocol (AXI4-stream). As there is the CBT character transmission cycle, txAck signal is used instead of tready signal.
+
+The time chart for MIKUMARI data transmission is shown in the [figure](#MIKU-TX-TIME). The upper layer protocol sets the next data after detecting txAck high. If the data is last 1-byte of the frame body, assert frameLastInTx and keep it high until the next txAck high. The data 'D' is the 1st 1-byte of the data body in the next frame. We can suspend the data transmission by de-asserting validInTx. If validInTx is low at the txBeat timing, idle character is sent.
+
+![MIKU-TX-TIME](mikumari-tx-timechart.png "Time chart for MIKUMARI data transmission."){: #MIKU-TX-TIME width="100%"}
+
+The time char for MIKUMARI data receive is shown in the [figure](#MIKU-RX-TIME). The validOutRx goes high when the dataOutRx is valid. If the dataOutRx is the last 1-byte of the frame, frameLastOutRx goes high at the same timing of validOutRx. After that, as checksum and K-type character receive continues, user data in the next frame will not appear immediately. Sometimes, validOutRx will not go high at the expected timing due to idle character receive or conflicting with K- or T-type characters.
+
+![MIKU-RX-TIME](mikumari-rx-timechart.png "Time chart for MIKUMARI data receive."){: #MIKU-RX-TIME width="100%"}
+
+### Pulse transmission
+
+The pulse transmission with pulse types is realized by using K-type characters. The pulse type and the transmission request timing are encoded to a K-type character, and it is transmitted with highest priority. The receiver side decodes the received pulse K-type character and reproduces the pulse timing and the pulse type value. While the CBT character transmission is accepted once per 5 or 10 clock cycles, the pulse transmission can be requested at any timing. Due to the internal process realizing this feature, an additional idle character transmission is necessary after the pulse K-type character transmission. Therefore, the busy length for a pulse transfer is 10 and 20 clock cycles for CDCM-10-2.5 and CDCM-10-1.5, respectively. This limits the maximum pulse frequency. In addition, transmission of several pulse types at the same timing is also impossible.
+
+Due to the limitation of the range of expressible bit combinations using 8-bit, only the pulse K-type characters do not guarantee the DC balance of the signal on the transmission line. If the averaged duty ratio of the CDCM modulated clock is not 50%, the recovered clock phase is systematically shifted depending on the averaged duty ratio. This effect is visible when the pulse transfer rate is high. See [Ref](hogehoge) for the details.
+
+### Data scrambler
+
+The MIKUMARI link supports the data scrambling based on PRBS16. Since the data scrambler guarantees the DC balance on average and there is no demerit, the author strongly recommend to use it.
+
+### Checksum error
+
+The checksumErr goes high, if the received checksum value and the calculated value is not the same. The MIKUMARI link do nothing even if the checksum error is detected. When the error is detected, processing is left to the upper layer protocol.
+
+## MikumariBlock
+
+The MikumariBlock is a wrapper module including the CbtLane and the MikumariLane. The intermediate signals between the CBT and the MIKUMARI link are hidden. For users, the author recommends to use the MikumariBlock. The entity port structure is shown as follows. The almost all MikumariBlock entity ports are directly connected to the CBT and the MikumariLane entity ports, however, the clock synchronization is done inside the MikumariBlock. Therefore, the reset input to the MikumariBlock is asynchronous.
+
+```VHDL
+entity MikumariBlock is
+  generic (
+    -- CBT generic -------------------------------------------------------------
+    -- CDCM-TX --
+    kIoStandardTx    : string;  -- IO standard of OBUFDS
+    kTxPolarity      : boolean:= FALSE; -- true: inverse polarity
+    -- CDCM-RX --
+    genIDELAYCTRL    : boolean; -- If TRUE, IDELAYCTRL is instantiated.
+    kDiffTerm        : boolean; -- IBUF DIFF_TERM
+    kRxPolarity      : boolean; -- If true, inverts Rx polarity
+    kIoStandardRx    : string;  -- IOSTANDARD of IBUFDS
+    kIoDelayGroup    : string;  -- IODELAY_GROUP for IDELAYCTRL and IDELAY
+    kFreqFastClk     : real;    -- Frequency of SERDES fast clock (MHz).
+    kFreqRefClk      : real;    -- Frequency of refclk for IDELAYCTRL (MHz).
+    -- Encoder/Decoder
+    kNumEncodeBits   : integer:= 2;  -- 1:CDCM-10-1.5 or 2:CDCM-10-2.5
+    -- Master/Slave
+    kCbtMode         : string;
+    -- DEBUG --
+    enDebugCBT       : boolean:= false;
+
+    -- MIKUMARI generic --------------------------------------------------------
+    -- Scrambler --
+    enScrambler      : boolean:= true;
+    -- DEBUG --
+    enDebugMikumari  : boolean:= false
+  );
+  Port (
+    -- System ports -----------------------------------------------------------
+    rst           : in std_logic;          -- Asynchronous reset input
+    clkSer        : in std_logic;          -- Slow clock
+    clkPar        : in std_logic;          -- Fast clock
+    clkIndep      : in std_logic;          -- Independent clock for monitor in CBT
+    clkIdctrl     : in std_logic;          -- Reference clock for IDELAYCTRL (if exist)
+    clkIsReady    : in std_logic;          -- Flag to indicate slow and fast clocks are ready
+    initIn        : in std_logic;          -- Redo the initialize process
+
+    TXP           : out std_logic;         -- CDCM TXP port. Connect to toplevel port
+    TXN           : out std_logic;         -- CDCM TXN port. Connect to toplevel port
+    RXP           : in std_logic;          -- CDCM RXP port. Connect to toplevel port
+    RXN           : in std_logic;          -- CDCM RXN port. Connect to toplevel port
+    modClk        : out std_logic;         -- Modulated clock output
+
+    -- CBT ports ------------------------------------------------------------
+    laneUp        : out std_logic;         -- CBT link connection is established
+    pattErr       : out std_logic;         -- CDCM waveform pattern is broken
+    watchDogErr   : out std_logic;         -- Watchdog timer alert
+
+    -- Mikumari ports -------------------------------------------------------
+    linkUp        : out std_logic;         -- MIKUMARI link connection is established
+
+    -- Data IF TX --
+    dataInTx      : in CbtUDataType;       -- User data input.
+    validInTx     : in std_logic;          -- Indicate dataIn is valid.
+    frameLastInTx : in std_logic;          -- Indicate current dataIn is a last character in a normal frame.
+    txAck         : out std_logic;         -- Acknowledge to validIn signal.
+
+    pulseIn       : in std_logic;          -- Pulse input. Must be one-shot signal.
+    pulseTypeTx   : in MikumariPulseType;  -- 3-bit short message to be sent with pulse.
+    busyPulseTx   : out std_logic;         -- Under transmission of previous pulse. If high, pulseIn is ignored.
+
+    -- Data IF RX --
+    dataOutRx     : out CbtUDataType;      -- User data output.
+    validOutRx    : out std_logic;         -- Indicate current dataOut is valid.
+    frameLastRx   : out std_logic;         -- Indicate current dataOut is the last data in a normal frame.
+    checksumErr   : out std_logic;         -- Check-sum error is happened in the present normal frame.
+
+    pulseOut      : out std_logic;         -- Reproduced one-shot pulse output.
+    pulseTypeRx   : out MikumariPulseType  -- Short message accompanying the pulse.
+
+  );
+end MikumariBlock;
+```
+## Example design
+### crv-master/crv-slave
+
+The path to the example designs projects.
+
+- AMANEQ-official/example-design/mikumari/mikumari-crv-master
+- AMANEQ-official/example-design/mikumari/mikumari-crv-slave
+
+The mikumari-crv-master (slave) projects are example design for the point-to-point connection between the master and the slave AMANEQ modules. The mini-mezzanine CRV card is necessary to use these example designs. AMANEQ with the CRV card is shown in the [picture](#CRV-PICTURE). The reference clock is generated from an oscillator (100 MHz) on AMANEQ, and the slave module is synchronized by the recovered clock. After establishing the MIKUMARI link, the master and slave modules start to send the 8-bit incremental data continuously each other. The value is incremented at txAck high. In this design, the frame body length is set to 64-bit. In addition, a pulse can be transmitted from the master side by inputting NIM signal to the NIM-IN-1 port. The reproduced pulse is output from the NIM-OUT-1 port of the slave module.
+
+
+![CRV-PICTURE](amaneq-crv.png "AMANEQ with CRV card."){: #CRV-PICTURE width="50%"}
+
+The block diagram of these example designs is shown in the figure. There are two different clock generators on AMANEQ. One is MMCM in FPGA. The other is an external jitter cleaner IC, CDCE62002. The clock path to BUFG can be changed by rewriting the description for BUFG at the last part of the toplevel.vhd as follows. Here, the clock signals from CDCE62002 are selected. (C6C: CDCE62002, mmcm: MMCM.)
+
+```VHDL
+
+  u_BUFG_Fast_inst : BUFG
+  port map (
+     O => clk_fast, -- 1-bit output: Clock output
+     I => c6c_fast  -- 1-bit input: Clock input
+     --I => mmcm_fast  -- 1-bit input: Clock input
+  );
+
+  u_BUFG_Slow_inst : BUFG
+  port map (
+     O => clk_slow, -- 1-bit output: Clock output
+     I => c6c_slow  -- 1-bit input: Clock input
+     --I => mmcm_slow  -- 1-bit input: Clock input
+  );
+
+```
+
+![CRV-FW](crv-master.png "Block diagram of crv-master (slave)."){: #CRV-FW width="90%"}
+
+To assert clk_is_ready, both lock signals from MMCM and CDCE62002 are necessary. Thus, the setting for both clock generators must be the same. In this design, the parallel clock frequency of 125 MHz is expected. If you want to change the frequency, please reproduce the IP and set the CDCE62002 registers through SiTCP from the PC. Please use amaneq_software/Common/src/set_cdce62002_main.cc to change the CDCE62002 setting. There two SFP connectors on AMANEQ, but only the SFP1 is working for network communication.
+
+The FW and CDCE62002 are reset by pushing the reset switch (SW2) on AMANEQ. DIP SW setting are as follows.
+
+- 1st bit: 0: Use SiTCP default IP. 1: Use IP stored in EEPROM.
+- 2nd bit: NC
+- 3rd bit: NC
+- 4th bit: 0: Send 8-bit incremental data. 1: Send IDLE character.
+
+LED indicators.
+
+- LED1: MIKUMARI link is up.
+- LED2: Both PLLs are locked.
+- LED3: Clk is ready.
+- LED4: NC
+
