@@ -59,7 +59,7 @@ entity CbtLane is
   port
     (
       -- SYSTEM port --
-      srst          : in std_logic; -- Asyncrhonous assert, syncrhonous deassert reset. (active high)
+      srst          : in std_logic; -- Asyncrhonous assert, synchronous de-assert reset. (active high)
       clkSer        : in std_logic; -- From BUFG (5 x clkPar freq.)
       clkPar        : in std_logic; -- From BUFG
       clkIndep      : in std_logic; -- Independent clock for monitor
@@ -343,7 +343,7 @@ entity MikumariLane is
   port
   (
     -- SYSTEM port --------------------------------------------------------------------------
-    srst        : in std_logic; -- Asyncrhonous assert, syncrhonous deassert reset. (active high)
+    srst        : in std_logic; -- Asynchronous assert, synchronous de-assert reset. (active high)
     clkPar      : in std_logic; -- From BUFG
     cbtUpIn     : in std_logic; -- Cbt lane up signal
     linkUp      : out std_logic; -- Mikumari link is up
@@ -353,7 +353,7 @@ entity MikumariLane is
     dataInTx      : in CbtUDataType;       -- User data input.
     validInTx     : in std_logic;          -- Indicate dataIn is valid.
     frameLastInTx : in std_logic;          -- Indicate current dataIn is a last character in a normal frame.
-    txAck         : out std_logic;         -- Ackknowledge to valinIn signal.
+    txAck         : out std_logic;         -- Acknowledge to validIn signal.
 
     pulseIn       : in std_logic;          -- Pulse input. Must be one-shot signal.
     pulseTypeTx   : in MikumariPulseType;  -- 3-bit short message to be sent with pulse.
@@ -374,7 +374,7 @@ entity MikumariLane is
     checksumErr : out std_logic;           -- Check-sum error is happened in the present normal frame.
 
     pulseOut    : out std_logic;           -- Reproduced one-shot pulse output.
-    pulseTypeRx : out MikumariPulseType;   -- Short massange accompanying the pulse.
+    pulseTypeRx : out MikumariPulseType;   -- Short message accompanying the pulse.
 
     -- Cbt ports --
     isKtypeIn   : in std_logic; --
@@ -573,6 +573,132 @@ The MIKUMARI link supports the data scrambling based on PRBS16. Since the data s
 
 The checksumErr goes high, if the received checksum value and the calculated value is not the same. The MIKUMARI link do nothing even if the checksum error is detected. When the error is detected, processing is left to the upper layer protocol.
 
-## Practical usage
+## MikumariBlock
 
-The MikumariBlock is a wrapper module including the CbtLane and the MikumariLane.
+The MikumariBlock is a wrapper module including the CbtLane and the MikumariLane. The intermediate signals between the CBT and the MIKUMARI link are hidden. For users, the author recommends to use the MikumariBlock. The entity port structure is shown as follows. The almost all MikumariBlock entity ports are directly connected to the CBT and the MikumariLane entity ports, however, the clock synchronization is done inside the MikumariBlock. Therefore, the reset input to the MikumariBlock is asynchronous.
+
+```VHDL
+entity MikumariBlock is
+  generic (
+    -- CBT generic -------------------------------------------------------------
+    -- CDCM-TX --
+    kIoStandardTx    : string;  -- IO standard of OBUFDS
+    kTxPolarity      : boolean:= FALSE; -- true: inverse polarity
+    -- CDCM-RX --
+    genIDELAYCTRL    : boolean; -- If TRUE, IDELAYCTRL is instantiated.
+    kDiffTerm        : boolean; -- IBUF DIFF_TERM
+    kRxPolarity      : boolean; -- If true, inverts Rx polarity
+    kIoStandardRx    : string;  -- IOSTANDARD of IBUFDS
+    kIoDelayGroup    : string;  -- IODELAY_GROUP for IDELAYCTRL and IDELAY
+    kFreqFastClk     : real;    -- Frequency of SERDES fast clock (MHz).
+    kFreqRefClk      : real;    -- Frequency of refclk for IDELAYCTRL (MHz).
+    -- Encoder/Decoder
+    kNumEncodeBits   : integer:= 2;  -- 1:CDCM-10-1.5 or 2:CDCM-10-2.5
+    -- Master/Slave
+    kCbtMode         : string;
+    -- DEBUG --
+    enDebugCBT       : boolean:= false;
+
+    -- MIKUMARI generic --------------------------------------------------------
+    -- Scrambler --
+    enScrambler      : boolean:= true;
+    -- DEBUG --
+    enDebugMikumari  : boolean:= false
+  );
+  Port (
+    -- System ports -----------------------------------------------------------
+    rst           : in std_logic;          -- Asynchronous reset input
+    clkSer        : in std_logic;          -- Slow clock
+    clkPar        : in std_logic;          -- Fast clock
+    clkIndep      : in std_logic;          -- Independent clock for monitor in CBT
+    clkIdctrl     : in std_logic;          -- Reference clock for IDELAYCTRL (if exist)
+    clkIsReady    : in std_logic;          -- Flag to indicate slow and fast clocks are ready
+    initIn        : in std_logic;          -- Redo the initialize process
+
+    TXP           : out std_logic;         -- CDCM TXP port. Connect to toplevel port
+    TXN           : out std_logic;         -- CDCM TXN port. Connect to toplevel port
+    RXP           : in std_logic;          -- CDCM RXP port. Connect to toplevel port
+    RXN           : in std_logic;          -- CDCM RXN port. Connect to toplevel port
+    modClk        : out std_logic;         -- Modulated clock output
+
+    -- CBT ports ------------------------------------------------------------
+    laneUp        : out std_logic;         -- CBT link connection is established
+    pattErr       : out std_logic;         -- CDCM waveform pattern is broken
+    watchDogErr   : out std_logic;         -- Watchdog timer alert
+
+    -- Mikumari ports -------------------------------------------------------
+    linkUp        : out std_logic;         -- MIKUMARI link connection is established
+
+    -- Data IF TX --
+    dataInTx      : in CbtUDataType;       -- User data input.
+    validInTx     : in std_logic;          -- Indicate dataIn is valid.
+    frameLastInTx : in std_logic;          -- Indicate current dataIn is a last character in a normal frame.
+    txAck         : out std_logic;         -- Acknowledge to validIn signal.
+
+    pulseIn       : in std_logic;          -- Pulse input. Must be one-shot signal.
+    pulseTypeTx   : in MikumariPulseType;  -- 3-bit short message to be sent with pulse.
+    busyPulseTx   : out std_logic;         -- Under transmission of previous pulse. If high, pulseIn is ignored.
+
+    -- Data IF RX --
+    dataOutRx     : out CbtUDataType;      -- User data output.
+    validOutRx    : out std_logic;         -- Indicate current dataOut is valid.
+    frameLastRx   : out std_logic;         -- Indicate current dataOut is the last data in a normal frame.
+    checksumErr   : out std_logic;         -- Check-sum error is happened in the present normal frame.
+
+    pulseOut      : out std_logic;         -- Reproduced one-shot pulse output.
+    pulseTypeRx   : out MikumariPulseType  -- Short message accompanying the pulse.
+
+  );
+end MikumariBlock;
+```
+## Example design
+### crv-master/crv-slave
+
+The path to the example designs projects.
+
+- AMANEQ-official/example-design/mikumari/mikumari-crv-master
+- AMANEQ-official/example-design/mikumari/mikumari-crv-slave
+
+The mikumari-crv-master (slave) projects are example design for the point-to-point connection between the master and the slave AMANEQ modules. The mini-mezzanine CRV card is necessary to use these example designs. AMANEQ with the CRV card is shown in the [picture](#CRV-PICTURE). The reference clock is generated from an oscillator (100 MHz) on AMANEQ, and the slave module is synchronized by the recovered clock. After establishing the MIKUMARI link, the master and slave modules start to send the 8-bit incremental data continuously each other. The value is incremented at txAck high. In this design, the frame body length is set to 64-bit. In addition, a pulse can be transmitted from the master side by inputting NIM signal to the NIM-IN-1 port. The reproduced pulse is output from the NIM-OUT-1 port of the slave module.
+
+
+![CRV-PICTURE](amaneq-crv.png "AMANEQ with CRV card."){: #CRV-PICTURE width="50%"}
+
+The block diagram of these example designs is shown in the figure. There are two different clock generators on AMANEQ. One is MMCM in FPGA. The other is an external jitter cleaner IC, CDCE62002. The clock path to BUFG can be changed by rewriting the description for BUFG at the last part of the toplevel.vhd as follows. Here, the clock signals from CDCE62002 are selected. (C6C: CDCE62002, mmcm: MMCM.)
+
+```VHDL
+
+  u_BUFG_Fast_inst : BUFG
+  port map (
+     O => clk_fast, -- 1-bit output: Clock output
+     I => c6c_fast  -- 1-bit input: Clock input
+     --I => mmcm_fast  -- 1-bit input: Clock input
+  );
+
+  u_BUFG_Slow_inst : BUFG
+  port map (
+     O => clk_slow, -- 1-bit output: Clock output
+     I => c6c_slow  -- 1-bit input: Clock input
+     --I => mmcm_slow  -- 1-bit input: Clock input
+  );
+
+```
+
+![CRV-FW](crv-master.png "Block diagram of crv-master (slave)."){: #CRV-FW width="90%"}
+
+To assert clk_is_ready, both lock signals from MMCM and CDCE62002 are necessary. Thus, the setting for both clock generators must be the same. In this design, the parallel clock frequency of 125 MHz is expected. If you want to change the frequency, please reproduce the IP and set the CDCE62002 registers through SiTCP from the PC. Please use amaneq_software/Common/src/set_cdce62002_main.cc to change the CDCE62002 setting. There two SFP connectors on AMANEQ, but only the SFP1 is working for network communication.
+
+The FW and CDCE62002 are reset by pushing the reset switch (SW2) on AMANEQ. DIP SW setting are as follows.
+
+- 1st bit: 0: Use SiTCP default IP. 1: Use IP stored in EEPROM.
+- 2nd bit: NC
+- 3rd bit: NC
+- 4th bit: 0: Send 8-bit incremental data. 1: Send IDLE character.
+
+LED indicators.
+
+- LED1: MIKUMARI link is up.
+- LED2: Both PLLs are locked.
+- LED3: Clk is ready.
+- LED4: NC
+
