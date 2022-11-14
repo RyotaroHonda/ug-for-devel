@@ -2,9 +2,14 @@
 
 ## Update history
 
-**2020.10.26**
+**2022.11.7**
 
-* hogehoge
+* Add description for CBT and MIKUMARI link.
+
+**2022.11.14**
+
+* Add description for NestDAQ protocol.
+* Modify the description about fan-out for the MIKUMARI link.
 
 ## Module overview
 
