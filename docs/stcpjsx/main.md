@@ -529,11 +529,11 @@ The path to the example designs projects. There are two repositories as follows.
 
 The first one is for the developer. If you contributes the development of core functions, e.g., CBT and  MIKUMARI link, please select this one. Vivado projects in this repository include source files other than project specific source from external git repository, AMANEQ-official/amaneq_devel.git, in order to use and modify the latest source codes. You need to fork and clone AMANEQ-official/amaneq_devel.git too. The second one is for users. This is copy of AMANEQ-official/StcpJsx-Example, but the Vivado projects have all the source code under their project directories.
 
-![CRV-PICTURE](amaneq-crv.png "AMANEQ with CRV card."){: #CRV-PICTURE width="90%"}
+![CRV-PICTURE](amaneq-crv.png "AMANEQ with CRV card."){: #CRV-PICTURE width="50%"}
 
 The StcpJsx_Primary/Secondary projects are example design for the point-to-point connection between the primary and the secondary AMANEQ modules. The mini-mezzanine CRV card is necessary to use these example designs. AMANEQ with the CRV card is shown in the [picture](#CRV-PICTURE). The reference clock is generated from an oscillator (100 MHz) on AMANEQ, and the secondary module is synchronized by the recovered clock.
 
-![VIO](StcpJsx-VIO.png "VIO setting through hardware manager."){: #VIO width="50%"}
+![VIO](StcpJsx-VIO.png "VIO setting through hardware manager."){: #VIO width="90%"}
 
 This example firmware can transfer StcpJsx pulses and commands from primary to secondary by inputting the signal to NIM-IN1 and 2, respectively. Since there are 6 types of pulses and 4 types of commands, we need to set registers to select which type is used before testing this firmware. The registers are set by VIO through JTAG, and then the PC, on which Vivado is installed, is necessary. [Figure](#VIO) is the screen shot for register setting by VIO. *enable_command* and *enable_pulse* bits select the command and pulse types to be transferred. If you set 0x2 to *enable_command*, the command assigned to 2nd bit is sent to the secondary. **Do NOT set more than 2-bits to high.** You also can set the register values, gate_number and heartbeat number, using VIO. These values are sent to the secondary to the commands. The ILA is inserted to both primary and secondary. If you have two PCs, you can test them while checking the received signals on the secondary side.
 
