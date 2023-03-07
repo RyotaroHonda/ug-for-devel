@@ -6,13 +6,13 @@ The MIKUMARI system is manufacture IP independent except for the serializer/de-s
 
 ## Overview
 
-The minimum configuration of the MIKUMARI system is shown in the [figure](#MIKUMARI-MIN-CONFIG). The left and right hand sides are the master and the slave, respectively. The purpose of the MIKUMARI system is distributing the reference clock to all the FEEs, and then a master module must have an oscillator. To operate the system, two skew adjusted clock signals are necessary. One is the parallel clock signal to drive the parallel data path, and the other is the serial clock signal to drive the transmission line. In many cases, the reference clock will be equal to the parallel clock. The frequency ratio between the serial and parallel clock signals is defined by the modulation pattern. If the CDCM-10-XX (See [Ref](https://ieeexplore.ieee.org/document/9131833).) is used, the developer has to prepare the 5 times faster serial clock than that of the parallel clock. The maximum transferable reference (parallel) clock frequency is determined by the maximum acceptable clock frequency of the clock buffer in FPGA or the maximum data rate of IO pads. For example for Kintex-7 with the speed-grate -1 and the FBG package, the maximum BUFG speed and the maximum IO rate are 625 MHz and 1250 Mbps (HP bank case), and then the maximum transferable parallel clock speed is 125 MHz.
+The minimum configuration of the MIKUMARI system is shown in the [figure](#MIKUMARI-MIN-CONFIG). The left and right hand sides are the primary and the secondary, respectively. The purpose of the MIKUMARI system is distributing the reference clock to all the FEEs, and then a primary module must have an oscillator. To operate the system, two skew adjusted clock signals are necessary. One is the parallel clock signal to drive the parallel data path, and the other is the serial clock signal to drive the transmission line. In many cases, the reference clock will be equal to the parallel clock. The frequency ratio between the serial and parallel clock signals is defined by the modulation pattern. If the CDCM-10-XX (See [Ref](https://ieeexplore.ieee.org/document/9131833).) is used, the developer has to prepare the 5 times faster serial clock than that of the parallel clock, and 4 times faster clock signal is necessary for CDCM-8-XX. The maximum transferable reference (parallel) clock frequency is determined by the maximum acceptable clock frequency of the clock buffer in FPGA or the maximum data rate of IO pads. For example for Kintex-7 with the speed-grate -1 and the FBG package, the maximum BUFG speed and the maximum IO rate are 625 MHz and 1250 Mbps (HP bank case), and then the maximum transferable parallel clock speed is 125 MHz.
 
-In the slave side, these clock signals are reproduced from the modulated clock signal by a PLL on FEEs. Many PLL devices, i.e., PLLs in FPGA, external PLL ICs, and external jitter cleaner ICs, will work as a clock recovery circuit. To obtain the good jitter performance, the PLL of which the phase noise in low frequency region is low should be selected. The jitter distribution depends on the selected PLL device. As discussed in [Ref](hogehoge), the obtained jitter rms when using MMCM in Kintex-7 FPGA is worse than that of the external jitter cleaner IC, CDCE62002. This comes not from the main peak structure but from the tail structure mainly. In author's opinion, MMCM is enough for 1 ns TDC synchronization, but it is not enough for high-resolution TDC with the precision around 30 ps. From the view point of the clock phase uncertainty, the PLL should have a zero-delay mode. As the CDCM technique recovers the parallel clock from the modulated clock, the phase uncertainty of the recovered clock does not appear if the PLL has the zero-delay mode. This is the important difference between the CDR circuit, which reproduced the serial clock. Unavoidable phase uncertainty exists due to the frequency division.
+In the secondary side, these clock signals are reproduced from the modulated clock signal by a PLL on FEEs. Many PLL devices, i.e., PLLs in FPGA, external PLL ICs, and external jitter cleaner ICs, will work as a clock recovery circuit. To obtain the good jitter performance, the PLL of which the phase noise in low frequency region is low should be selected. The jitter distribution depends on the selected PLL device. As discussed in [Ref](hogehoge), the obtained jitter rms when using MMCM in Kintex-7 FPGA is worse than that of the external jitter cleaner IC, CDCE62002. This comes not from the main peak structure but from the tail structure mainly. In author's opinion, MMCM is enough for 1 ns TDC synchronization, but it is not enough for high-resolution TDC with the precision around 30 ps. From the view point of the clock phase uncertainty, the PLL should have a zero-delay mode. As the CDCM technique recovers the parallel clock from the modulated clock, the phase uncertainty of the recovered clock does not appear if the PLL has the zero-delay mode. This is the important difference between the CDR circuit, which reproduced the serial clock. Unavoidable phase uncertainty exists due to the frequency division.
 
 ![MIKUMARI-MIN-CONFIG](mikumari-min-config.png "The minimum configuration of the MIKUMARI system."){: #MIKUMARI-MIN-CONFIG width="95%"}
 
-Since the MIKUMARI system aims to distribute the reference clock to synchronize FEEs, the connection topology of the MIKUMARI link should be a tree structure starting from a master module. If the master module cannot drive all FEEs, a fan-out module is necessary in intermediate layers. An example of fan-out is shown in the [figure](#MIKUMARI-FANOUT). As the CBT and the MIKUMARI link are defined as the full-duplex transceiver and the link protocol for point-to-point communication, respectively, a simple signal fan-out is not allowed. In fan-out module, the clock signals are once recovered and drive the CBTs transferring the modulated clock signal to downstream modules. In many applications, all FEEs will receive the same command from the master module, and then TX data can be broadcasted, however, a user circuit summarizing information from the downstream modules will be necessary in the RX side. However, this is not mandatory. Since the TX and RX of the MIKUMARI link are independent, the RX port of the right side can be left open if you decide not to use the uplink data path. Since the validOutRx and frameLastOutRx signals are one-shot, the RX port and the TX ports cannot be directly connected due to the txAck cycle. Therefore, the TxElasticBuffer is necessary to connect the RX and TX ports. The TxElasticBuffer is a simple queuing buffer for adjusting CBT character transfer cycle.
+Since the MIKUMARI system aims to distribute the reference clock to synchronize FEEs, the connection topology of the MIKUMARI link should be a tree structure starting from a primary module. If the primary module cannot drive all FEEs, a fan-out module is necessary in intermediate layers. An example of fan-out is shown in the [figure](#MIKUMARI-FANOUT). As the CBT and the MIKUMARI link are defined as the full-duplex transceiver and the link protocol for point-to-point communication, respectively, a simple signal fan-out is not allowed. In fan-out module, the clock signals are once recovered and drive the CBTs transferring the modulated clock signal to downstream modules. In many applications, all FEEs will receive the same command from the primary module, and then TX data can be broadcasted, however, a user circuit summarizing information from the downstream modules will be necessary in the RX side. However, this is not mandatory. Since the TX and RX of the MIKUMARI link are independent, the RX port of the right side can be left open if you decide not to use the uplink data path. Since the validOutRx and frameLastOutRx signals are one-shot, the RX port and the TX ports cannot be directly connected due to the txAck cycle. Therefore, the TxElasticBuffer is necessary to connect the RX and TX ports. The TxElasticBuffer is a simple queuing buffer for adjusting CBT character transfer cycle.
 
 ![MIKUMARI-FANOUT](mikumari-fanout.png "Example of fan-out."){: #MIKUMARI-FANOUT width="90%"}
 
@@ -28,7 +28,7 @@ The CBT is a physical layer of the MIKUMARI system. About the CBT, see also [Ref
 - Initialize IOSERDES when detecting the cable (fiber) connection
 - Provides the clock monitor and the error detection.
 
-Currently, the CBT supports the CDCM-10-2.5 and CDCM-10-1.5. Then, the frequency ratio between the serial and parallel clock signals is 5 with the double-data-rate (DDR) mode. The SDR mode is not supported. In addition, only the differential signal is supported.
+Currently, the CBT supports the CDCM-10-2.5, CDCM-10-1.5, and CDCM-8-1.5. Then, the frequency ratios between the serial and parallel clock signals are 5 for CDCM-10-XX and 4 for CDCM-8-XX with the double-data-rate (DDR) mode, respectively. The SDR mode is not supported. In addition, only the differential signal is supported.
 
 ### Interface of CBT
 
@@ -38,6 +38,8 @@ The top-level block of the CBT is **CbtLane**. The global parameters for the CBT
 entity CbtLane is
   generic
     (
+      -- CDCM-Mod-Pattern --
+      kCdcmModWidth    : integer; -- # of time slices of the CDCM signal
       -- CDCM-TX --
       kIoStandardTx    : string;  -- IO standard of OBUFDS
       kTxPolarity      : boolean:= FALSE; -- true: inverse polarity
@@ -109,6 +111,11 @@ end CbtLane;
   <tbody>
   <tr><td class="tcenter" colspan=4><b>Generic port</b></td></tr>
   <tr>
+    <td>kCdcmModWidth</td>
+    <td class="tcenter">-</td>
+    <td>Select 8 or 10 for CDCM-8-XX and CDCM-10-XX, respectively.</td>
+  </tr>
+  <tr>
     <td>kIoStandardTx</td>
     <td class="tcenter">-</td>
     <td>Tx port IO standard, e.g., LVDS.</td>
@@ -151,7 +158,7 @@ end CbtLane;
   <tr>
     <td>kNumEncodeBits</td>
     <td class="tcenter">-</td>
-    <td>Set the payload size of the CDCM signal. Set 1 or 2. 1: CDCM-10-1.5. 2: CDCM-10-2.5.</td>
+    <td>Set the payload size of the CDCM signal. Set 1 or 2. 1: CDCM-10-1.5. 2: CDCM-10-2.5. Currently, CDCM-8-2.5 is not supported.</td>
   </tr>
     <td>kCbtMode</td>
     <td class="tcenter">-</td>
@@ -286,7 +293,7 @@ end CbtLane;
   <tr>
     <td>modClock</td>
     <td class="tcenter">Out</td>
-    <td>The CDCM modulated clock output. It is valid in the slave mode.</td>
+    <td>The CDCM modulated clock output. It is valid in the secondary mode.</td>
   </tr>
 </tbody>
 </table>
@@ -297,7 +304,7 @@ The CBT character is a 10-bit internal data format in the CBT and is generated b
 
 ### CDCM encode and decode
 
-Currently, the CBT supports CDCM-10-1.5 and CDCM-10-2.5; they can transmit 1-bit binary + idle pattern and 2-bit binary + idle pattern per clkPar cycle, respectively. For details, see [Ref](https://ieeexplore.ieee.org/document/9131833) and [Ref](hogehoge). Since the CBT character has 10-bit data width, 10 and 5 clock cycles are necessary to send a CBT character by CDCM-10-1.5 and CDCM-10-2.5, respectively. CDCM-10-1.5 has longer latency while it provides the better jitter performance because the duty cycle change range is narrower than that of CDCM-10-2.5.
+Currently, the CBT supports CDCM-10-1.5 (CDCM-8-1.5) and CDCM-10-2.5; they can transmit 1-bit binary + idle pattern and 2-bit binary + idle pattern per clkPar cycle, respectively. For details, see [Ref](https://ieeexplore.ieee.org/document/9131833) and [Ref](hogehoge). Since the CBT character has 10-bit data width, 10 and 5 clock cycles are necessary to send a CBT character by CDCM-10-1.5 (CDCM-8-1.5) and CDCM-10-2.5, respectively. CDCM-10-1.5 (CDCM-8-1.5) has longer latency while it provides the better jitter performance because the duty cycle change range is narrower than that of CDCM-10-2.5.
 
 ### Initialization process
 
@@ -547,7 +554,7 @@ The MIKUMARI protocol transmits the data using a simple frame structure, called 
 
 The frame structure is similar that of [Xilinx Aurora 8b/1b](https://japan.xilinx.com/products/intellectual-property/aurora8b10b.html) protocol. Inserting FSK, FEK, and checksum are done by the MIKUMARI link, and later two are inserted after detecting frameLastInTx. At the receiver side, frameLastOutRx assertion and checksum calculation are performed after detecting the FEK. **Note that 8-bit checksum data does not appear from dataOutRx. It is internally used.** About details of the frame structure, see also [Ref](hogehoge).
 
-Since the frame body and 8-bit checksum data are D-type character, their transmission request can be blocked by the T-type character transmission by the CBT. If it is blocked, the txAck is not returned at the expected timing, the upper layer protocol needs to keep the current dataInTx and validInTx until txAck is returned. It is defined that pulse K-type characters have higher priority to other K-type character in this protocol. Thus, FSK and FEK insertion can be delayed by pulse transmission request. Therefore, the data transmission using the MIKUMARI frame is not perfectly fixed. Use the pulse transfer function for usages where arrival times must be strictly controlled.
+Since the frame body and 8-bit checksum data are D-type character, their transmission request can be blocked by the T-type character transmission by the CBT. If it is blocked, the txAck is not returned at the expected timing, the upper layer protocol needs to keep the current dataInTx and validInTx until txAck is returned. It is defined that pulse K-type characters have higher priority to other K-type character in this protocol. Thus, FSK and FEK insertion can be delayed by pulse transmission request. Therefore, the data transmission latency using the MIKUMARI frame is not perfectly fixed. Use the pulse transfer function for usages where arrival times must be strictly controlled.
 
 The data interface of the MIKUMARI link is also similar to that of [Xilinx Aurora 8b/1b](https://japan.xilinx.com/products/intellectual-property/aurora8b10b.html) protocol (AXI4-stream). As there is the CBT character transmission cycle, txAck signal is used instead of tready signal.
 
@@ -561,7 +568,7 @@ The time char for MIKUMARI data receive is shown in the [figure](#MIKU-RX-TIME).
 
 ### Pulse transmission
 
-The pulse transmission with pulse types is realized by using K-type characters. The pulse type and the transmission request timing are encoded to a K-type character, and it is transmitted with highest priority. The receiver side decodes the received pulse K-type character and reproduces the pulse timing and the pulse type value. While the CBT character transmission is accepted once per 5 or 10 clock cycles, the pulse transmission can be requested at any timing. Due to the internal process realizing this feature, an additional idle character transmission is necessary after the pulse K-type character transmission. Therefore, the busy length for a pulse transfer is 10 and 20 clock cycles for CDCM-10-2.5 and CDCM-10-1.5, respectively. This limits the maximum pulse frequency. In addition, transmission of several pulse types at the same timing is also impossible.
+The pulse transmission with pulse types is realized by using K-type characters. The pulse type and the transmission request timing are encoded to a K-type character, and it is transmitted with highest priority. The receiver side decodes the received pulse K-type character and reproduces the pulse timing and the pulse type value. While the CBT character transmission is accepted once per 5 or 10 clock cycles, the pulse transmission can be requested at any timing. Due to the internal process realizing this feature, an additional idle character transmission is necessary after the pulse K-type character transmission. Therefore, the busy length for a pulse transfer is 10 and 20 clock cycles for CDCM-10-2.5 and CDCM-10-1.5 (CDCM-8-1.5), respectively. This limits the maximum pulse frequency. In addition, transmission of several pulse types at the same timing is also impossible.
 
 Due to the limitation of the range of expressible bit combinations using 8-bit, only the pulse K-type characters do not guarantee the DC balance of the signal on the transmission line. If the averaged duty ratio of the CDCM modulated clock is not 50%, the recovered clock phase is systematically shifted depending on the averaged duty ratio. This effect is visible when the pulse transfer rate is high. See [Ref](hogehoge) for the details.
 
@@ -581,6 +588,8 @@ The MikumariBlock is a wrapper module including the CbtLane and the MikumariLane
 entity MikumariBlock is
   generic (
     -- CBT generic -------------------------------------------------------------
+    -- CDCM-Mod-Pattern --
+    kCdcmModWidth    : integer; -- # of time slices of the CDCM signal
     -- CDCM-TX --
     kIoStandardTx    : string;  -- IO standard of OBUFDS
     kTxPolarity      : boolean:= FALSE; -- true: inverse polarity
@@ -651,54 +660,3 @@ entity MikumariBlock is
   );
 end MikumariBlock;
 ```
-## Example design
-### crv-master/crv-slave
-
-The path to the example designs projects.
-
-- AMANEQ-official/example-design/mikumari/mikumari-crv-master
-- AMANEQ-official/example-design/mikumari/mikumari-crv-slave
-
-The mikumari-crv-master (slave) projects are example design for the point-to-point connection between the master and the slave AMANEQ modules. The mini-mezzanine CRV card is necessary to use these example designs. AMANEQ with the CRV card is shown in the [picture](#CRV-PICTURE). The reference clock is generated from an oscillator (100 MHz) on AMANEQ, and the slave module is synchronized by the recovered clock. After establishing the MIKUMARI link, the master and slave modules start to send the 8-bit incremental data continuously each other. The value is incremented at txAck high. In this design, the frame body length is set to 64-bit. In addition, a pulse can be transmitted from the master side by inputting NIM signal to the NIM-IN-1 port. The reproduced pulse is output from the NIM-OUT-1 port of the slave module.
-
-
-![CRV-PICTURE](amaneq-crv.png "AMANEQ with CRV card."){: #CRV-PICTURE width="50%"}
-
-The block diagram of these example designs is shown in the figure. There are two different clock generators on AMANEQ. One is MMCM in FPGA. The other is an external jitter cleaner IC, CDCE62002. The clock path to BUFG can be changed by rewriting the description for BUFG at the last part of the toplevel.vhd as follows. Here, the clock signals from CDCE62002 are selected. (C6C: CDCE62002, mmcm: MMCM.)
-
-```VHDL
-
-  u_BUFG_Fast_inst : BUFG
-  port map (
-     O => clk_fast, -- 1-bit output: Clock output
-     I => c6c_fast  -- 1-bit input: Clock input
-     --I => mmcm_fast  -- 1-bit input: Clock input
-  );
-
-  u_BUFG_Slow_inst : BUFG
-  port map (
-     O => clk_slow, -- 1-bit output: Clock output
-     I => c6c_slow  -- 1-bit input: Clock input
-     --I => mmcm_slow  -- 1-bit input: Clock input
-  );
-
-```
-
-![CRV-FW](crv-master.png "Block diagram of crv-master (slave)."){: #CRV-FW width="90%"}
-
-To assert clk_is_ready, both lock signals from MMCM and CDCE62002 are necessary. Thus, the setting for both clock generators must be the same. In this design, the parallel clock frequency of 125 MHz is expected. If you want to change the frequency, please reproduce the IP and set the CDCE62002 registers through SiTCP from the PC. Please use amaneq_software/Common/src/set_cdce62002_main.cc to change the CDCE62002 setting. There two SFP connectors on AMANEQ, but only the SFP1 is working for network communication.
-
-The FW and CDCE62002 are reset by pushing the reset switch (SW2) on AMANEQ. DIP SW setting are as follows.
-
-- 1st bit: 0: Use SiTCP default IP. 1: Use IP stored in EEPROM.
-- 2nd bit: NC
-- 3rd bit: NC
-- 4th bit: 0: Send 8-bit incremental data. 1: Send IDLE character.
-
-LED indicators.
-
-- LED1: MIKUMARI link is up.
-- LED2: Both PLLs are locked.
-- LED3: Clk is ready.
-- LED4: NC
-
