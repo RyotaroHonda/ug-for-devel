@@ -1,16 +1,16 @@
-# NestDAQ protocol
+# Streaming Tdc Control Protocol for J-PARC Slow Extraction (StcpJsx)
 
-NestDAQ protocol is an upper layer protocol to distribute the timing pulses and the command to the front-end electronics and to gather status information from FEEs. This protocol is designed for applications in the J-PARC hadron experiments where the DC beams is delivered by the slow extraction method. In addition, it is also expected that the [NestDAQ](https://github.com/spadi-alliance/nestdaq) framework is used for the data acquisition software.
+Streaming Tdc Control Protocol (STCP) is an upper layer protocol to distribute the timing pulses and the command to the front-end electronics and to gather status information from FEEs. We developed the dedicated protocol for applications in the J-PARC hadron experiments where the DC beams is delivered by the slow extraction method. Thus, we call this protocol **StcpJsx**;
 
-As the NestDAQ protocol is still dedicated to the point-to-point data communication, the routing function  is not supported. The [figure](#NDP-OV) represents the overview of the NestDAQ protocol. The data structure is asymmetric between downward and upward data path. In the downward data path, the 8-bit commands are sent together with 32-bit register values from the master side as the payload of the MIKUMARI frame. In addition, the pulse transmission is supported. In the upward direction, 8-bit status flags are sent back from the slave side. This is also realized by the MIKUMARI frame. As explained in the MIKUMARI section, there is the CBT character transfer cycle and the transmission priority among character types behind the command transmission, and then there is a range of latency from when the transfer request is issued until the data arrives. Thus, the commands are used for the semi-synchronous operation. The status flag update has also a range of latency.
+As the StcpJsx is still dedicated to the point-to-point data communication, the routing function is not supported. The [figure](#STCP-OV) represents the overview of the  protocol. The data structure is asymmetric between downward and upward data path. In the downward data path, the 8-bit commands are sent together with 32-bit register values from the primary side as the payload of the MIKUMARI frame. In addition, the pulse transmission is supported. In the upward direction, 8-bit status flags are sent back from the secondary side. This is also realized by the MIKUMARI frame. As explained in the MIKUMARI section, there is the CBT character transfer cycle and the transmission priority among character types behind the command transmission, and then there is a range of latency from when the transfer request is issued until the data arrives. Thus, the commands are used for the semi-synchronous operation. The status flag update has also a range of latency.
 
-![NDP-OV](ndp-overview.png "Overview of NestDAQ protocol."){: #NDP-OV width="90%"}
+![STCP-OV](stcp-overview.png "Overview of StcpJsx."){: #STCP-OV width="90%"}
 
 ## Pulse and Command definition
 
 ### Pulse definition
 
-Currently, 6 types of pulses are defined in the NestDAQ protocol.
+Currently, 6 types of pulses are defined in the StcpJsx.
 
 <table class="vmgr-table">
   <thead><tr>
@@ -164,13 +164,13 @@ In the upward direction, 8-bit status flags are returned from FEEs. Current defi
 </tbody>
 </table>
 
-## Relation between streaming TDC an NestDAQ protocol
+## Relation between streaming TDC and StcpJsx
 
-The NestDAQ protocol (NDP) has a role to control the streaming TDC on the FEE. Here, the author describes the relation between behavior of the streaming TDC and the NDP. The data acquisition condition for the streaming TDC is defined as shown in the [figure](#GATE-TC). The acquisition condition is defined by the run status, the gate signal, and the veto signal. The streaming can work and generate the TDC data when the run status is *RUN*, the gate signal is high, and the veto signal is low. The NDP master module set the run status to *RUN*, if the DAQ run start is requested by the PC and all FEEs return ModReady high. The streaming TDC does not work under the *IDLE* status even if the gate signal is low. After setting the run status *RUN*, the master module sends the GateStart pulse to open the gate. Thus, the streaming TDC starts working. The data generation can be temporally stopped by the veto signal.
+The StcpJsx has a role to control the streaming TDC on the FEE. Here, the author describes the relation between behavior of the streaming TDC and the STCP. The data acquisition condition for the streaming TDC is defined as shown in the [figure](#GATE-TC). The acquisition condition is defined by the run status, the gate signal, and the veto signal. The streaming can work and generate the TDC data when the run status is *RUNNING*, the gate signal is high, and the veto signal is low. The StcpJsx primary module set the run status to *RUNNING*, if the DAQ run start is requested by the PC and all FEEs return ModReady high. The streaming TDC does not work under the *IDLE* status even if the gate signal is low. After setting the run status *RUNNING*, the primary module sends the GateStart pulse to open the gate. Thus, the streaming TDC starts working. The data generation can be temporally stopped by the veto signal.
 
 ![GATE-TC](gate-tc.png "Data acquisition condition for streaming TDC. Blue and red objects represent the command and the pulse, respectively."){: #GATE-TC width="90%"}
 
-The time chart for the heartbeat related things is represented in the figure. The HbCounterReset pulse resets the local heartbeat counter and the local heartbeat frame number. The local heartbeat frame number is internally incremented at the heartbeat timing in each FEE. The global (NDP) frame number is updated after the heartbeat. These two number must be the same and at the heartbeat timing. The streaming TDC checks the sameness of two frame numbers, and if they are different, the FEE sets the TimeFrameSlip flag ON and sets  the slip flag in the delimiter word of the streaming TDC.
+The time chart for the heartbeat related things is represented in the figure. The HbCounterReset pulse resets the local heartbeat counter and the local heartbeat frame number. The local heartbeat frame number is internally incremented at the heartbeat timing in each FEE. The global (StcpJsx) frame number is updated after the heartbeat. These two number must be the same and at the heartbeat timing. The streaming TDC checks the sameness of two frame numbers, and if they are different, the FEE sets the global heartbeat frame number mismatch flag ON and sets the GHbfNumMismatch flag in the delimiter word of the streaming TDC.
 
 The author expects that this signal is sent before opening the gate. As the gate number is inserted into the delimiter word, the gate number should be updated before sending the GateStart pulse.
 
@@ -182,12 +182,12 @@ The author expects that the P3 signal from the MR is used as the HbCounterReset 
 
 The gate signal corresponds to the spill gate in the J-PARC hadron experiments. The extraction starts several hundred ms after the P3 signal. The opening timing of the spill gate is user defined. It defines when the data acquisition starts during the slow extraction. The author expects that the GateStart pulse is generated as the delayed pulse of the P3 signal. The closing timing of the spill gate is also user defined.
 
-## NdpMaster
+## StcpJsxPrimary
 
-The NdpMaster is the command and pulse sender in the MIKUMARI system. It is implemented in the master module, and if there is a distributer module, it is instantiated as the command and pulse sender to each FEE. The entity port structure is as follows.
+The StcpJsxPrimary is the command and pulse sender in the MIKUMARI system. It is implemented in the primary module, and if there is a distributer module, it is instantiated as the command and pulse sender to each FEE. The entity port structure is as follows.
 
 ```VHDL
-entity NdpMaster is
+entity StcpJsxPrimary is
   port
   (
     -- system --
@@ -199,18 +199,18 @@ entity NdpMaster is
     busyCommandSend : out std_logic;
 
     -- Pulse input --
-    ndpPulseIn      : in NdpPulseType;
+    stcpPulseIn     : in StcpJsxPulseType;
     pulseError      : out std_logic;
 
     -- Command input --
-    ndpCommandIn    : in NdpCommandType;
+    stcpCommandIn   : in StcpJsxCommandType;
     commandError    : out std_logic;
 
     hbNumber        : in HbNumberType;
     gateNumber      : in GateNumberType;
 
     -- Slave flag output --
-    ndpFlagOut      : out NdpFlagType;
+    stcpFlagOut     : out StcpJsxFlagType;
 
 
     -- MIKUMARI IF --
@@ -228,7 +228,7 @@ entity NdpMaster is
     frameLastRx     : in std_logic
 
   );
-end NdpMaster;
+end StcpJsxPrimary;
 ```
 <table class="vmgr-table">
   <thead><tr>
@@ -264,7 +264,7 @@ end NdpMaster;
     <td>The next command transmission request is ignored while this signal is high.</td>
   </tr>
   <tr>
-    <td>ndpPulseIn</td>
+    <td>stcpPulseIn</td>
     <td class="tcenter">In</td>
     <td>Pulse transmission request. This is the std_logic_vector whose length is the number of pulse types. To send the pulse, set 1 to the bit corresponding to the target pulse type. Do not set more than 2-bits to 1. The MIKUMARI pulse transmission function can send only a pulse type at the same time. The request signal width must  be one-shot.</td>
   </tr>
@@ -274,7 +274,7 @@ end NdpMaster;
     <td>This goes high if the user requests to send more than two types of pulses at the same time.</td>
   </tr>
   <tr>
-    <td>ndpCommandIn</td>
+    <td>stcpCommandIn</td>
     <td class="tcenter">In</td>
     <td>Command transmission request. This is the std_logic_vector whose length is the number of commands. To send the command, set 1 to the bit corresponding to the target command type. Do not set more than 2-bits to 1. The values on hbNumber and gateNumber ports are latched when any of the bits in ndpCommandIn is set to 1.</td>
   </tr>
@@ -291,12 +291,12 @@ end NdpMaster;
   <tr>
     <td>gateNumber</td>
     <td class="tcenter">In</td>
-    <td>8-bit gate number input. It is latched when any of the bits of ndpCommandIn is set to 1.</td>
+    <td>8-bit gate number input. It is latched when any of the bits of stcpCommandIn is set to 1.</td>
   </tr>
   <tr>
-    <td>ndpFlagOut</td>
+    <td>stcpFlagOut</td>
     <td class="tcenter">Out</td>
-    <td>NDP flag output. This is the std_logic_vector whose length is the number of flags. The bits are flipped when the flag information is updated by the slave side.</td>
+    <td>StcpJsx flag output. This is the std_logic_vector whose length is the number of flags. The bits are flipped when the flag information is updated by the secondary side.</td>
   </tr>
   <tr>
     <td>dataOutTx</td>
@@ -351,16 +351,16 @@ end NdpMaster;
 </tbody>
 </table>
 
-The NdpMaster hides the txAck cycle of the MIKUMARI link. The pulse/command transmissions are managed by the busy signals trigger by the transmission request. The pulse and command transmissions are requested by setting 1 to the bit in ndpPulseIn and ndpCommandIn, respectively. For example, the HbCounterReset index is 1, and then the pulse transmission with the HbCounterReset is requested by setting the ndpPulseIn vector as `0b00_0010`, like `ndpPulseIn(kHbCounterReset) <= '1'`. **The request signal width must be one-shot.** If the request is accepted, the busy signal goes high. When the busy signal is high, the next request is ignored. This is the same for the command, but the values on hbNumber and gateNumber are latched at the command request timing.
+The StcpJsxPrimary hides the txAck cycle of the MIKUMARI link. The pulse/command transmissions are managed by the busy signals trigger by the transmission request. The pulse and command transmissions are requested by setting 1 to the bit in stcpPulseIn and stcpCommandIn, respectively. For example, the HbCounterReset index is 1, and then the pulse transmission with the HbCounterReset is requested by setting the stcpPulseIn vector as `0b00_0010`, like `stcpPulseIn(kHbCounterReset) <= '1'`. **The request signal width must be one-shot.** If the request is accepted, the busy signal goes high. When the busy signal is high, the next request is ignored. This is the same for the command, but the values on hbNumber and gateNumber are latched at the command request timing.
 
-ndpFlatOut is the flag vector indicating the status of the slave module. There is no valid signal for this status flags. If the slave module updates the flag, it goes to the master module and appears from this port.
+stcpFlatOut is the flag vector indicating the status of the secondary module. There is no valid signal for this status flags. If the secondary module updates the flag, it goes to the primary module and appears from this port.
 
-## NdpSlave
+## StcpJsxSecondary
 
-The NdpSlave is the command and pulse receiver in the MIKUMARI system. It is implemented in the slave module, and if there is a distributer module, it is instantiated as the command and pulse receiver from the master module. The entity port structure is as follows.
+The StcpJsxSecondary is the command and pulse receiver in the MIKUMARI system. It is implemented in the secondary module, and if there is a distributer module, it is instantiated as the command and pulse receiver from the primary module. The entity port structure is as follows.
 
 ```VHDL
-entity NdpSlave is
+entity StcpJsxSecondary is
   port
   (
     -- system --
@@ -369,18 +369,18 @@ entity NdpSlave is
     linkUpIn        : in std_logic;
 
     -- Pulse output --
-    ndpPulseOut     : out NdpPulseType;
+    stcpPulseOut    : out StcpJsxPulseType;
     pulseError      : out std_logic;
 
     -- Command output --
-    ndpCommandOut   : out NdpCommandType;
+    stcpCommandOut  : out StcpJsxCommandType;
     commandError    : out std_logic;
 
     hbNumber        : out HbNumberType;
     gateNumber      : out GateNumberType;
 
     -- Slave flag input --
-    ndpFlagIn       : in NdpFlagType;
+    stcpFlagIn      : in StcpJsxFlagType;
 
     -- MIKUMARI IF --
     dataOutTx       : out CbtUDataType;
@@ -397,7 +397,7 @@ entity NdpSlave is
     pulseTypeRx     : in MikumariPulseType  -- Short massange accompanying the pulse.
 
   );
-end NdpSlave;
+end StcpJsxSecondary;
 ```
 
 <table class="vmgr-table">
@@ -424,24 +424,24 @@ end NdpSlave;
     <td>Input linkUp signal from the MIKUMARI link.</td>
   </tr>
   <tr>
-    <td>ndpPulseOut</td>
+    <td>stcpPulseOut</td>
     <td class="tcenter">Out</td>
     <td>One-shot pulse output vector.</td>
   </tr>
   <tr>
     <td>pulseError</td>
     <td class="tcenter">Out</td>
-    <td>It indicates that the master module tries to send more two pulse types at the same time.</td>
+    <td>It indicates that the primary module tries to send more two pulse types at the same time.</td>
   </tr>
   <tr>
-    <td>ndpCommandOut</td>
+    <td>stcpCommandOut</td>
     <td class="tcenter">Out</td>
     <td>Command output vector.</td>
   </tr>
   <tr>
     <td>commandError</td>
     <td class="tcenter">Out</td>
-    <td>It indicates that the master module tries to send more two commands at the same time.</td>
+    <td>It indicates that the primary module tries to send more two commands at the same time.</td>
   </tr>
   <tr>
     <td>hbNumber</td>
@@ -454,9 +454,9 @@ end NdpSlave;
     <td>8-bit gate number output. The value is updated when the GateNum command is received.</td>
   </tr>
   <tr>
-    <td>ndpFlagIn</td>
+    <td>stcpFlagIn</td>
     <td class="tcenter">In</td>
-    <td>NDP flag input. </td>
+    <td>StcpJsx flag input. </td>
   </tr>
   <tr>
     <td>dataOutTx</td>
@@ -511,18 +511,43 @@ end NdpSlave;
 </tbody>
 </table>
 
-The received pulse and command appear from ndpPulseOut and ndpCommandOut. For example, if the pulse with the HbCounterReset type is received, the 2nd bit of the ndpPulseOut goes high. This is the same for the command. In addition, hbNumber and gateNumber are also updated for HbFrameNum and GateNum commands, respectively. If errorPulse and errorCommand is high, it indicates that the master module tries to send more than two types of pulses and commands, respectively.
+The received pulse and command appear from stcpPulseOut and stcpCommandOut. For example, if the pulse with the HbCounterReset type is received, the 2nd bit of the stcpPulseOut goes high. This is the same for the command. In addition, hbNumber and gateNumber are also updated for HbFrameNum and GateNum commands, respectively. If errorPulse and errorCommand is high, it indicates that the primary module tries to send more than two types of pulses and commands, respectively.
 
-The status flag vector is connected to the ndpFlagIn port. If status flag bit pattern is changed, the frame transmission is automatically generated by NdpSlave.
+The status flag vector is connected to the stcpFlagIn port. If status flag bit pattern is changed, the frame transmission is automatically generated by StcpJsxSecondary.
 
 ## Fan-out
 
-Since the CBT character transfer cycle is hidden by the NestDAQ protocol, the NDP master and slave modules can be directly connected. **Note that this is not confirmed yet and is just my expectation.** Therefore, for fan-out, the NDP slave module can directly drive multiple NDP master modules in the intermediate (fan-oute) module.
+Since the CBT character transfer cycle is hidden by the STC protocol, the StcpJsx primary and secondary modules can be directly connected. **Note that this is not confirmed yet and is just my expectation.** Therefore, for fan-out, the StcpJsx secondary module can directly drive multiple StcpJsx primary modules in the intermediate (fan-oute) module.
 
 ## Example design
-### ndp-master/ndp-slave
+### StcpJsx_Primary/StcpJsx_Secondary
 
-The path to the example designs projects. The firmware structure is similar to those of mikumari-crv-master (slave). The NdpMaster and NdpSlave are instantiated instead of 8-bit incremental data generator.
+The path to the example designs projects. There are two repositories as follows. Each repository contains two Vivado projects, StcpJsx_Primary and StcpJsx_Secondary.
 
-- AMANEQ-official/example-design/mikumari/ndp-crv-master
-- AMANEQ-official/example-design/mikumari/ndp-crv-slave
+- AMANEQ-official/StcpJsx-Example
+- spadi-alliance/StcpJsx-Example-Clone
+
+The first one is for the developer. If you contributes the development of core functions, e.g., CBT and  MIKUMARI link, please select this one. Vivado projects in this repository include source files other than project specific source from external git repository, AMANEQ-official/amaneq_devel.git, in order to use and modify the latest source codes. You need to fork and clone AMANEQ-official/amaneq_devel.git too. The second one is for users. This is copy of AMANEQ-official/StcpJsx-Example, but the Vivado projects have all the source code under their project directories.
+
+![CRV-PICTURE](amaneq-crv.png "AMANEQ with CRV card."){: #CRV-PICTURE width="90%"}
+
+The StcpJsx_Primary/Secondary projects are example design for the point-to-point connection between the primary and the secondary AMANEQ modules. The mini-mezzanine CRV card is necessary to use these example designs. AMANEQ with the CRV card is shown in the [picture](#CRV-PICTURE). The reference clock is generated from an oscillator (100 MHz) on AMANEQ, and the secondary module is synchronized by the recovered clock.
+
+![VIO](StcpJsx-VIO.png "VIO setting through hardware manager."){: #VIO width="50%"}
+
+This example firmware can transfer StcpJsx pulses and commands from primary to secondary by inputting the signal to NIM-IN1 and 2, respectively. Since there are 6 types of pulses and 4 types of commands, we need to set registers to select which type is used before testing this firmware. The registers are set by VIO through JTAG, and then the PC, on which Vivado is installed, is necessary. [Figure](#VIO) is the screen shot for register setting by VIO. *enable_command* and *enable_pulse* bits select the command and pulse types to be transferred. If you set 0x2 to *enable_command*, the command assigned to 2nd bit is sent to the secondary. **Do NOT set more than 2-bits to high.** You also can set the register values, gate_number and heartbeat number, using VIO. These values are sent to the secondary to the commands. The ILA is inserted to both primary and secondary. If you have two PCs, you can test them while checking the received signals on the secondary side.
+
+The firmware is reset by pushing the reset switch (SW2) on AMANEQ. DIP SW setting is as follows (only for the secondary).
+
+- 1st bit: 0: Use SiTCP default IP. 1: Use IP stored in EEPROM.
+- 2nd bit: Select NIM-OUT2 signal. 0: Command output. 1: Recovered slow (parallel) clock.
+- 3rd bit: NC
+- 4th bit: NC
+
+
+LED indicators.
+
+- LED1: MIKUMARI link is established.
+- LED2: PLLs in FPGA are locked.
+- LED3: TCP connection is established.
+- LED4: NC

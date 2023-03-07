@@ -17,9 +17,10 @@ markdown_extensions:
 #      slugify: !!python/name:hbfm.toc.slugify
   #- hbfm.number_headers
   #- hbfm.quote_uri_hash
+  - image_captions:
+      numbering: true
   - caption:
-      stripTitle: false
-      captionNumbering: true
+      numbering: true
 
 extra_css:
   - css/custom.css
@@ -40,7 +41,7 @@ plugins:
 nav:
   - Top: index.md
   - Mikumari: mikumari/main.md
-  - NestDAQ protocol: nestdaq_protocol/main.md
+  - Stcp: stcpjsx/main.md
 #  - SiTCP: sitcp/main.md
 #  - Firmware: firmware/main.md
 #  - For Developer: developer/main.md
